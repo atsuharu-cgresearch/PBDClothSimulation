@@ -1,0 +1,128 @@
+#pragma kernel ExternalForce
+#pragma kernel Collision
+#pragma kernel Predict
+#pragma kernel Update
+#pragma kernel StretchConstHorizontal
+#pragma kernel StretchConstVertical
+
+struct Particle
+{
+    float3 x;
+    float3 p;
+    float3 v;
+    float w;
+};
+
+RWStructuredBuffer<Particle> _Particles;
+
+uint _NumParticles;
+
+uint _NumWidth;
+uint _NumHeight;
+float _ParticleSpacing;
+
+float3 _Gravity;
+float _Damping;
+float _Dt;
+
+uint _Step;
+float _KStretchH;
+
+[numthreads(64, 1, 1)]
+void ExternalForce (uint id : SV_DispatchThreadID)
+{
+    if (id >= _NumParticles) return;
+
+    // 重力を適用
+    _Particles[id].v += _Gravity * _Dt;
+
+    // 速度の減衰を適用
+    _Particles[id].v *= _Damping;
+}
+
+[numthreads(64, 1, 1)]
+void Collision (uint id : SV_DispatchThreadID)
+{
+    if (id >= _NumParticles) return;
+}
+
+[numthreads(64, 1, 1)]
+void Predict (uint id : SV_DispatchThreadID)
+{
+    if (id >= _NumParticles) return;
+
+    // 固定の場合は速度を0にしておく
+    if (_Particles[id].w == 0.0)
+    {
+        _Particles[id].p = _Particles[id].x;
+        _Particles[id].v = 0.0;
+        return;
+    }
+
+    // 現在の位置と速度から、予測位置を計算
+    _Particles[id].p = _Particles[id].x + _Particles[id].v * _Dt;
+}
+
+[numthreads(64, 1, 1)]
+void Update (uint id : SV_DispatchThreadID)
+{
+    if (id >= _NumParticles) return;
+
+    _Particles[id].v = (_Particles[id].p - _Particles[id].x) / _Dt;
+
+    _Particles[id].x = _Particles[id].p;
+}
+
+void SolveStretch(uint pID0, uint pID1, float restLength, float k)
+{
+    float3 p0 = _Particles[pID0].p;
+    float3 p1 = _Particles[pID1].p;
+
+    float3 p0p1 = p1 - p0;
+    float p0p1Length = length(p0p1);
+
+    if (p0p1Length < 1e-6) return;
+
+    float w0 = _Particles[pID0].w;
+    float w1 = _Particles[pID1].w;
+
+    float3 gradC = p0p1 / p0p1Length;
+    // 縮んでいる時は何もしない
+    float C = max(p0p1Length - restLength, 0);
+    float s = C / ((w0 + w1) * dot(gradC, gradC));
+
+    float3 deltaP0 = +s * w0 * gradC;
+    float3 deltaP1 = -s * w1 * gradC;
+
+    _Particles[pID0].p += deltaP0 * k;
+    _Particles[pID1].p += deltaP1 * k;
+}
+
+[numthreads(64, 1, 1)]
+void StretchConstHorizontal (uint id : SV_DispatchThreadID)
+{
+    // _Stepの値が0か1かで、拘束を適用するパーティクルの組み合わせが変わる
+    uint pID0 = 2 * id + _Step;
+    uint pID1 = pID0 + 1;
+
+    if (pID1 >= _NumParticles) return;
+
+    // p0が右端で、p0が左端になる場合は計算しない
+    uint x0 = pID0 % _NumWidth;
+    uint x1 = pID1 % _NumWidth;
+    if (x0 > x1) return;
+
+    // 初期状態の距離以上に伸びないように拘束する
+    SolveStretch(pID0, pID1, _ParticleSpacing, _KStretchH);
+}
+
+[numthreads(64, 1, 1)]
+void StretchConstVertical (uint id : SV_DispatchThreadID)
+{
+    uint pID0 = id + (id / _NumWidth) * _NumWidth + _Step * _NumWidth;
+    uint pid1 = pID0 + _NumWidth;
+
+    if (pid1 >= _NumParticles) return;
+
+    SolveStretch(pID0, pid1, _ParticleSpacing, _KStretchH);
+}
