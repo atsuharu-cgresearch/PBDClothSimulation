@@ -9,6 +9,8 @@ public class PBDCloth : MonoBehaviour
 
     public PBDSolver.SolverParameters parameters;
 
+    public Transform anchorTransform;
+
     // 物理シミュレーション用
     private PBDBody body;
     private PBDSolver solver;
@@ -88,16 +90,18 @@ public class PBDCloth : MonoBehaviour
         mesh.uv = uvs;
         mesh.triangles = triangles;
 
+        mesh.bounds = new Bounds(transform.position, Vector3.one * 1000);
+
         meshFilter.mesh = mesh;
 
         meshRenderer = GetComponent<MeshRenderer>();
         meshRenderer.material = material;
     }
 
-    private void FixedUpdate()
+    private void Update()
     {
         // 物理シミュレーションを実行
-        solver.Execute(body, parameters, Time.fixedDeltaTime);
+        solver.Execute(body, parameters, Mathf.Clamp(Time.deltaTime, 1f / 500, 1f / 30), anchorTransform.position);
 
 
         // シミュレーション結果を取得して描画

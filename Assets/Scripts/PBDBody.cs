@@ -29,6 +29,8 @@ public class PBDBody
     // メッシュの分割を細かくする
     // 摩擦
 
+    // HDRP Fabric Shader Graph
+
     public ComputeBuffer distConstBuffer;
     public ComputeBuffer bendConstBuffer;
 
@@ -52,7 +54,7 @@ public class PBDBody
             {
                 // 格子状にパーティクルを配置する
                 // 固定するパーティクルのinvMassは0にしておく
-                if ((i == 0 && j == 0) || (i == 0 && j == numWidth - 1)) particleArray[i * numWidth + j] = new PBDParticle(new Vector3(j * dist, 1.0f, i * dist), 0.0f);
+                if ((i == 0 && j == 0)/* || (i == 0 && j == numWidth - 1)*/) particleArray[i * numWidth + j] = new PBDParticle(new Vector3(j * dist, 1.0f, i * dist), 0.0f);
                 else particleArray[i * numWidth + j] = new PBDParticle(new Vector3(j * dist, 1.0f, i * dist), 1.0f);
             }
         }
